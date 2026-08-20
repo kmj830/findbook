@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>📚 서가 이웃도서 탐색기</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- HTML5 QR Code / Barcode Scanner -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+            color: #333;
+        }
+        .app-header {
+            background: linear-gradient(135deg, #1f497d 0%, #2f5597 100%);
+            color: white;
+            padding: 20px 15px;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .card-custom {
+            border: none;
+            border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+            background: white;
+            margin-bottom: 14px;
+            overflow: hidden;
+        }
+        .loc-badge {
+            background-color: #e2efda;
+            color: #276a3c;
+            font-weight: bold;
+            padding: 6px 12px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+        .target-card-sg {
+            border-left: 6px solid #305496 !important;
+        }
+        .target-card-pg {
+            border-left: 6px solid #c00000 !important;
+        }
+        .btn-search {
+            background: #2f5597;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px;
+            padding: 10px 18px;
+        }
+        .btn-search:hover {
+            background: #1f497d;
+            color: white;
+        }
+        .distance-pill {
+            font-size: 14px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+        .dist-prev {
+            background-color: #e7f1ff;
+            color: #0d6efd;
+        }
+        .dist-next {
+            background-color: #ffeef0;
+            color: #dc3545;
+        }
+        .dist-curr {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        #reader {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="app-header text-center mb-3">
+        <h5 class="fw-bold mb-1"><i class="bi bi-book-half me-1"></i> 서가 이웃도서 탐색기</h5>
+        <div class="small opacity-75">서가에서 아무 책이나 바코드를 찍으면 목표 책의 거리를 안내합니다</div>
+    </div>
+
+    <div class="container pb-5">
+        
+        <!-- Search Card -->
+        <div class="card card-custom p-3">
+            <label class="form-label fw-bold mb-2"><i class="bi bi-upc-scan me-1"></i> 들고 계신 책의 바코드(등록번호)</label>
+            <div class="input-group mb-2">
+                <input type="text" id="barcodeInput" class="form-control form-control-lg text-uppercase fw-bold" placeholder="예: AA149416" style="letter-spacing: 1px;">
+                <button class="btn btn-search" type="button" id="searchBtn">
+                    <i class="bi bi-search"></i> 찾기
+                </button>
+            </div>
+
+            <!-- Camera Scan Button -->
+            <button class="btn btn-outline-secondary w-100 py-2 fw-bold mb-2" id="toggleCameraBtn">
+                <i class="bi bi-camera-fill me-1 text-primary"></i> 카메라로 바코드 스캔하기
+            </button>
+            <div id="cameraContainer" class="d-none mb-2">
+                <div id="reader"></div>
+                <button class="btn btn-sm btn-dark w-100 mt-1" id="stopCameraBtn">스캐너 닫기</button>
+            </div>
+
+            <!-- Quick target select dropdown -->
+            <div class="mt-2 pt-2 border-top">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted fw-bold">🎯 찾아야 할 도서 바로가기 (총 {{ total_targets_count }}권):</small>
+                </div>
+                <select class="form-select form-select-sm mt-1" id="quickSelect">
+                    <option value="">-- 서가 위치 순으로 선택 --</option>
+                    {% for t in target_list %}
+                    <option value="{{ t.reg_no }}">[{{ t.sub_line }}] {{ t.reg_no }} - {{ t.title[:20] }} ({{ t.type }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <!-- Result Section -->
+        <div id="resultSection" class="d-none">
+            
+            <!-- Current Book Position Banner -->
+            <div class="card card-custom p-3 bg-white border-start border-4 border-success">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="badge bg-secondary">현재 들고 있는 책</span>
+                    <span id="currentLocDesc" class="loc-badge">16-1 (41% 부근)</span>
+                </div>
+                <h4 id="currentCode" class="fw-bold text-primary mb-1">AA149416</h4>
+                <div id="currentDetail" class="small text-muted">16번 라인 1줄의 217번째 책</div>
+            </div>
+
+            <!-- Goal Match Banner (if current book IS a target) -->
+            <div id="exactMatchBanner" class="alert alert-success card-custom p-3 d-none border-0 shadow-sm">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-trophy-fill fs-1 text-warning me-3"></i>
+                    <div>
+                        <h5 class="fw-bold mb-1 text-success">🎉 축하합니다! 이 책이 바로 찾아야 할 도서입니다!</h5>
+                        <div id="exactMatchTitle" class="fw-bold"></div>
+                        <div id="exactMatchCall" class="small text-muted"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Nearest Targets (Prev & Next) -->
+            <h6 class="fw-bold text-secondary mt-3 mb-2"><i class="bi bi-compass me-1"></i> 가장 가까운 찾아야 할 책 거리 안내</h6>
+            
+            <!-- Closest Next (Behind) -->
+            <div id="nextCard" class="card card-custom p-3 mb-2 d-none">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span id="nextBadge" class="distance-pill dist-next">➡️ 뒤로 N권 앞</span>
+                    <span id="nextTypeBadge" class="badge bg-primary">서가배열</span>
+                </div>
+                <h5 id="nextReg" class="fw-bold text-danger mb-1">AA082379</h5>
+                <h6 id="nextTitle" class="fw-bold mb-1 text-dark">서명</h6>
+                <div class="small text-muted mb-1"><i class="bi bi-tag"></i> 청구기호: <span id="nextCall" class="fw-bold text-dark"></span></div>
+                <div class="small text-muted"><i class="bi bi-geo-alt"></i> 위치: <span id="nextLoc"></span></div>
+            </div>
+
+            <!-- Closest Prev (Front) -->
+            <div id="prevCard" class="card card-custom p-3 mb-2 d-none">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span id="prevBadge" class="distance-pill dist-prev">⬅️ 앞으로 N권 앞</span>
+                    <span id="prevTypeBadge" class="badge bg-danger">폐기취소</span>
+                </div>
+                <h5 id="prevReg" class="fw-bold text-primary mb-1">AA123456</h5>
+                <h6 id="prevTitle" class="fw-bold mb-1 text-dark">서명</h6>
+                <div class="small text-muted mb-1"><i class="bi bi-tag"></i> 청구기호: <span id="prevCall" class="fw-bold text-dark"></span></div>
+                <div class="small text-muted"><i class="bi bi-geo-alt"></i> 위치: <span id="prevLoc"></span></div>
+            </div>
+
+            <!-- All targets in this line accordion -->
+            <div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold text-secondary mb-0"><i class="bi bi-list-stars me-1"></i> 같은 줄(<span id="lineName"></span>) 내 목표 도서 전체 (<span id="lineTargetCount">0</span>권)</h6>
+                </div>
+                <div id="lineTargetsList"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const barcodeInput = document.getElementById('barcodeInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultSection = document.getElementById('resultSection');
+        const quickSelect = document.getElementById('quickSelect');
+        
+        let html5QrCode = null;
+
+        function performSearch(code) {
+            if (!code) code = barcodeInput.value.trim();
+            if (!code) {
+                alert('바코드(등록번호)를 입력해주세요.');
+                return;
+            }
+            barcodeInput.value = code.toUpperCase();
+
+            fetch(`/api/search?code=${encodeURIComponent(code)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert(data.error);
+                        return;
+                    }
+                    displayResult(data);
+                })
+                .catch(err => {
+                    alert('검색 중 오류가 발생했습니다: ' + err);
+                });
+        }
+
+        function displayResult(data) {
+            resultSection.classList.remove('d-none');
+            
+            // Current book
+            const curr = data.current_book;
+            document.getElementById('currentCode').innerText = curr.code;
+            document.getElementById('currentLocDesc').innerText = curr.loc_desc;
+            document.getElementById('currentDetail').innerText = `${curr.line}번 라인 ${curr.sub_line.split('-')[1]}줄의 ${curr.sub_idx}번째 책 (전체 행: ${curr.global_row})`;
+            document.getElementById('lineName').innerText = curr.sub_line;
+            document.getElementById('lineTargetCount').innerText = data.targets_count_in_line;
+
+            // Exact match
+            const exactBanner = document.getElementById('exactMatchBanner');
+            if (data.is_target) {
+                exactBanner.classList.remove('d-none');
+                document.getElementById('exactMatchTitle').innerText = `${data.target_info.title} (${data.target_info.type})`;
+                document.getElementById('exactMatchCall').innerText = `청구기호: ${data.target_info.call_no || '-'}`;
+            } else {
+                exactBanner.classList.add('d-none');
+            }
+
+            // Next Closest (Behind)
+            const nextCard = document.getElementById('nextCard');
+            if (data.closest_next) {
+                nextCard.classList.remove('d-none');
+                const t = data.closest_next;
+                document.getElementById('nextBadge').innerText = t.direction_text;
+                document.getElementById('nextTypeBadge').innerText = t.info.type;
+                document.getElementById('nextTypeBadge').className = t.info.type === '서가배열' ? 'badge bg-primary' : 'badge bg-danger';
+                document.getElementById('nextReg').innerText = t.reg_no;
+                document.getElementById('nextTitle').innerText = t.info.title || '-';
+                document.getElementById('nextCall').innerText = t.info.call_no || '-';
+                document.getElementById('nextLoc').innerText = t.loc_desc;
+            } else {
+                nextCard.classList.add('d-none');
+            }
+
+            // Prev Closest (Front)
+            const prevCard = document.getElementById('prevCard');
+            if (data.closest_prev) {
+                prevCard.classList.remove('d-none');
+                const t = data.closest_prev;
+                document.getElementById('prevBadge').innerText = t.direction_text;
+                document.getElementById('prevTypeBadge').innerText = t.info.type;
+                document.getElementById('prevTypeBadge').className = t.info.type === '서가배열' ? 'badge bg-primary' : 'badge bg-danger';
+                document.getElementById('prevReg').innerText = t.reg_no;
+                document.getElementById('prevTitle').innerText = t.info.title || '-';
+                document.getElementById('prevCall').innerText = t.info.call_no || '-';
+                document.getElementById('prevLoc').innerText = t.loc_desc;
+            } else {
+                prevCard.classList.add('d-none');
+            }
+
+            // List of all targets in line
+            const listDiv = document.getElementById('lineTargetsList');
+            listDiv.innerHTML = '';
+            
+            if (data.targets_by_distance.length === 0) {
+                listDiv.innerHTML = '<div class="alert alert-light text-center py-3">이 줄에는 찾아야 할 도서가 없습니다. 다른 라인으로 이동하세요.</div>';
+            } else {
+                data.targets_by_distance.forEach(t => {
+                    const card = document.createElement('div');
+                    card.className = `card card-custom p-3 ${t.info.type === '서가배열' ? 'target-card-sg' : 'target-card-pg'}`;
+                    const isCurr = (t.diff === 0);
+                    
+                    card.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="distance-pill ${isCurr ? 'dist-curr' : (t.diff > 0 ? 'dist-next' : 'dist-prev')}">${t.direction_text}</span>
+                            <span class="badge ${t.info.type === '서가배열' ? 'bg-primary' : 'bg-danger'}">${t.info.type}</span>
+                        </div>
+                        <h6 class="fw-bold mb-1 text-dark">${t.reg_no} - ${t.info.title || '-'}</h6>
+                        <div class="small text-muted"><i class="bi bi-tag"></i> ${t.info.call_no || '-'} | <i class="bi bi-geo"></i> ${t.loc_desc}</div>
+                    `;
+                    listDiv.appendChild(card);
+                });
+            }
+
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        searchBtn.addEventListener('click', () => performSearch());
+        barcodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        quickSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                barcodeInput.value = e.target.value;
+                performSearch(e.target.value);
+            }
+        });
+
+        // Camera Scanner Logic
+        const toggleCameraBtn = document.getElementById('toggleCameraBtn');
+        const stopCameraBtn = document.getElementById('stopCameraBtn');
+        const cameraContainer = document.getElementById('cameraContainer');
+
+        toggleCameraBtn.addEventListener('click', () => {
+            cameraContainer.classList.remove('d-none');
+            toggleCameraBtn.classList.add('d-none');
+            
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 150 }
+                },
+                (decodedText, decodedResult) => {
+                    stopScanner();
+                    barcodeInput.value = decodedText.trim().toUpperCase();
+                    performSearch(decodedText.trim().toUpperCase());
+                },
+                (errorMessage) => {
+                    // ignore
+                }
+            ).catch(err => {
+                alert('카메라 접근 권한이 필요하거나 지원되지 않는 브라우저입니다: ' + err);
+                stopScanner();
+            });
+        });
+
+        function stopScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch(err => console.log(err));
+            }
+            cameraContainer.classList.add('d-none');
+            toggleCameraBtn.classList.remove('d-none');
+        }
+
+        stopCameraBtn.addEventListener('click', stopScanner);
+    </script>
+</body>
+</html>
