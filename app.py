@@ -2,7 +2,7 @@ import json
 import os
 from flask import Flask, render_template, request, jsonify
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 
 # Load precomputed data
 DATA_PATH = os.path.join(os.path.dirname(__file__), 'data.json')
@@ -21,6 +21,10 @@ def index():
         x['sub_idx']
     ))
     return render_template('index.html', target_list=target_list, total_targets_count=len(targets))
+
+@app.route('/healthz')
+def healthz():
+    return jsonify({'status': 'ok'})
 
 @app.route('/api/search')
 def search():
