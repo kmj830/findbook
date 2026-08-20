@@ -12,30 +12,30 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body {
-            background-color: #f4f6f9;
+            background-color: #f0f2f5;
             font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
             color: #333;
         }
         .app-header {
             background: linear-gradient(135deg, #1f497d 0%, #2f5597 100%);
             color: white;
-            padding: 20px 15px;
-            border-radius: 0 0 20px 20px;
+            padding: 16px 14px;
+            border-radius: 0 0 18px 18px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .card-custom {
             border: none;
             border-radius: 14px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             background: white;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
             overflow: hidden;
         }
         .loc-badge {
             background-color: #e2efda;
             color: #276a3c;
             font-weight: bold;
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: 8px;
             display: inline-block;
         }
@@ -57,7 +57,7 @@
             color: white;
         }
         .distance-pill {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 800;
             padding: 4px 10px;
             border-radius: 20px;
@@ -74,11 +74,29 @@
             background-color: #d1e7dd;
             color: #0f5132;
         }
+        .nav-pills .nav-link {
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 6px 10px;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #2f5597;
+        }
         #reader {
             width: 100%;
             border-radius: 12px;
             overflow: hidden;
             background: #000;
+        }
+        .btn-complete {
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .progress-slim {
+            height: 8px;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -87,14 +105,25 @@
     <!-- Header -->
     <div class="app-header text-center mb-3">
         <h5 class="fw-bold mb-1"><i class="bi bi-book-half me-1"></i> 서가 이웃도서 탐색기</h5>
-        <div class="small opacity-75">서가에서 아무 책이나 바코드를 찍으면 목표 책의 거리를 안내합니다</div>
+        <div class="small opacity-75">아무 책이나 바코드를 찍으면 목표 책의 거리를 안내합니다</div>
+        
+        <!-- Live Progress Status -->
+        <div class="mt-2 pt-2 border-top border-light border-opacity-25 px-2">
+            <div class="d-flex justify-content-between small fw-bold mb-1">
+                <span>🎯 전체 진행률 (<span id="completedCount">0</span>/<span id="totalCount">174</span>권 찾음)</span>
+                <span id="progressPctText">0%</span>
+            </div>
+            <div class="progress progress-slim bg-white bg-opacity-25">
+                <div id="progressBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
+            </div>
+        </div>
     </div>
 
     <div class="container pb-5">
         
         <!-- Search Card -->
         <div class="card card-custom p-3">
-            <label class="form-label fw-bold mb-2"><i class="bi bi-upc-scan me-1"></i> 들고 계신 책의 바코드(등록번호)</label>
+            <label class="form-label fw-bold mb-1"><i class="bi bi-upc-scan me-1"></i> 들고 계신 책의 바코드(등록번호)</label>
             <div class="input-group mb-2">
                 <input type="text" id="barcodeInput" class="form-control form-control-lg text-uppercase fw-bold" placeholder="예: AA149416" style="letter-spacing: 1px;">
                 <button class="btn btn-search" type="button" id="searchBtn">
@@ -103,25 +132,56 @@
             </div>
 
             <!-- Camera Scan Button -->
-            <button class="btn btn-outline-secondary w-100 py-2 fw-bold mb-2" id="toggleCameraBtn">
+            <button class="btn btn-outline-secondary w-100 py-2 fw-bold mb-3" id="toggleCameraBtn">
                 <i class="bi bi-camera-fill me-1 text-primary"></i> 카메라로 바코드 스캔하기
             </button>
-            <div id="cameraContainer" class="d-none mb-2">
+            <div id="cameraContainer" class="d-none mb-3">
                 <div id="reader"></div>
                 <button class="btn btn-sm btn-dark w-100 mt-1" id="stopCameraBtn">스캐너 닫기</button>
             </div>
 
-            <!-- Quick target select dropdown -->
-            <div class="mt-2 pt-2 border-top">
-                <div class="d-flex justify-content-between align-items-center">
-                    <small class="text-muted fw-bold">🎯 찾아야 할 도서 바로가기 (총 {{ total_targets_count }}권):</small>
+            <!-- Category Separated Target Selectors -->
+            <div class="pt-2 border-top">
+                <div class="fw-bold small text-secondary mb-2"><i class="bi bi-bookmark-star-fill text-warning me-1"></i> 찾아야 할 도서 바로가기 (분류별)</div>
+                
+                <ul class="nav nav-pills nav-fill mb-2" id="targetTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="sg-tab" data-bs-toggle="pill" data-bs-target="#sg-pane" type="button">
+                            🟦 서가배열 (<span id="sgCount">0</span>)
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="pg-tab" data-bs-toggle="pill" data-bs-target="#pg-pane" type="button">
+                            🟥 폐기취소 (<span id="pgCount">0</span>)
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link text-success" id="done-tab" data-bs-toggle="pill" data-bs-target="#done-pane" type="button">
+                            ✅ 찾음 (<span id="doneCount">0</span>)
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="targetTabContent">
+                    <!-- 서가배열 Tab -->
+                    <div class="tab-pane fade show active" id="sg-pane">
+                        <select class="form-select form-select-sm" id="sgSelect">
+                            <option value="">-- 서가배열 남은 도서 선택 --</option>
+                        </select>
+                    </div>
+                    <!-- 폐기취소 Tab -->
+                    <div class="tab-pane fade" id="pg-pane">
+                        <select class="form-select form-select-sm" id="pgSelect">
+                            <option value="">-- 폐기취소 남은 도서 선택 --</option>
+                        </select>
+                    </div>
+                    <!-- 완료 Tab -->
+                    <div class="tab-pane fade" id="done-pane">
+                        <select class="form-select form-select-sm" id="doneSelect">
+                            <option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>
+                        </select>
+                    </div>
                 </div>
-                <select class="form-select form-select-sm mt-1" id="quickSelect">
-                    <option value="">-- 서가 위치 순으로 선택 --</option>
-                    {% for t in target_list %}
-                    <option value="{{ t.reg_no }}">[{{ t.sub_line }}] {{ t.reg_no }} - {{ t.title[:20] }} ({{ t.type }})</option>
-                    {% endfor %}
-                </select>
             </div>
         </div>
 
@@ -135,23 +195,25 @@
                     <span id="currentLocDesc" class="loc-badge">16-1 (41% 부근)</span>
                 </div>
                 <h4 id="currentCode" class="fw-bold text-primary mb-1">AA149416</h4>
-                <div id="currentDetail" class="small text-muted">16번 라인 1줄의 217번째 책</div>
-            </div>
-
-            <!-- Goal Match Banner (if current book IS a target) -->
-            <div id="exactMatchBanner" class="alert alert-success card-custom p-3 d-none border-0 shadow-sm">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-trophy-fill fs-1 text-warning me-3"></i>
-                    <div>
-                        <h5 class="fw-bold mb-1 text-success">🎉 축하합니다! 이 책이 바로 찾아야 할 도서입니다!</h5>
-                        <div id="exactMatchTitle" class="fw-bold"></div>
-                        <div id="exactMatchCall" class="small text-muted"></div>
+                <div id="currentDetail" class="small text-muted mb-2">16번 라인 1줄의 217번째 책</div>
+                
+                <!-- If this book itself is a target -->
+                <div id="selfTargetBox" class="d-none mt-2 pt-2 border-top">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-warning text-dark mb-1">🎯 목표 도서 일치!</span>
+                            <div id="selfTargetTitle" class="fw-bold small text-dark"></div>
+                            <div id="selfTargetCall" class="text-muted" style="font-size: 11px;"></div>
+                        </div>
+                        <button id="selfCompleteBtn" class="btn btn-sm btn-success btn-complete px-3 py-2">
+                            <i class="bi bi-check-circle-fill me-1"></i> 찾음 완료 체크
+                        </button>
                     </div>
                 </div>
             </div>
 
             <!-- Nearest Targets (Prev & Next) -->
-            <h6 class="fw-bold text-secondary mt-3 mb-2"><i class="bi bi-compass me-1"></i> 가장 가까운 찾아야 할 책 거리 안내</h6>
+            <h6 class="fw-bold text-secondary mt-3 mb-2"><i class="bi bi-compass me-1"></i> 가장 가까운 찾아야 할 책 거리 안내 (미완료만)</h6>
             
             <!-- Closest Next (Behind) -->
             <div id="nextCard" class="card card-custom p-3 mb-2 d-none">
@@ -161,8 +223,10 @@
                 </div>
                 <h5 id="nextReg" class="fw-bold text-danger mb-1">AA082379</h5>
                 <h6 id="nextTitle" class="fw-bold mb-1 text-dark">서명</h6>
-                <div class="small text-muted mb-1"><i class="bi bi-tag"></i> 청구기호: <span id="nextCall" class="fw-bold text-dark"></span></div>
-                <div class="small text-muted"><i class="bi bi-geo-alt"></i> 위치: <span id="nextLoc"></span></div>
+                <div class="small text-muted mb-2"><i class="bi bi-tag"></i> 청구기호: <span id="nextCall" class="fw-bold text-dark"></span> | <i class="bi bi-geo"></i> <span id="nextLoc"></span></div>
+                <button class="btn btn-sm btn-outline-success btn-complete w-100 py-1" onclick="toggleBookComplete(this.dataset.reg)">
+                    <i class="bi bi-check-lg"></i> 이 책 찾음 완료 체크하기
+                </button>
             </div>
 
             <!-- Closest Prev (Front) -->
@@ -173,14 +237,16 @@
                 </div>
                 <h5 id="prevReg" class="fw-bold text-primary mb-1">AA123456</h5>
                 <h6 id="prevTitle" class="fw-bold mb-1 text-dark">서명</h6>
-                <div class="small text-muted mb-1"><i class="bi bi-tag"></i> 청구기호: <span id="prevCall" class="fw-bold text-dark"></span></div>
-                <div class="small text-muted"><i class="bi bi-geo-alt"></i> 위치: <span id="prevLoc"></span></div>
+                <div class="small text-muted mb-2"><i class="bi bi-tag"></i> 청구기호: <span id="prevCall" class="fw-bold text-dark"></span> | <i class="bi bi-geo"></i> <span id="prevLoc"></span></div>
+                <button class="btn btn-sm btn-outline-success btn-complete w-100 py-1" onclick="toggleBookComplete(this.dataset.reg)">
+                    <i class="bi bi-check-lg"></i> 이 책 찾음 완료 체크하기
+                </button>
             </div>
 
-            <!-- All targets in this line accordion -->
+            <!-- All uncompleted targets in this line -->
             <div class="mt-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="fw-bold text-secondary mb-0"><i class="bi bi-list-stars me-1"></i> 같은 줄(<span id="lineName"></span>) 내 목표 도서 전체 (<span id="lineTargetCount">0</span>권)</h6>
+                    <h6 class="fw-bold text-secondary mb-0"><i class="bi bi-list-stars me-1"></i> 같은 줄(<span id="lineName"></span>) 내 남은 목표 도서 (<span id="lineTargetCount">0</span>권)</h6>
                 </div>
                 <div id="lineTargetsList"></div>
             </div>
@@ -189,22 +255,64 @@
 
     </div>
 
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
     <!-- JavaScript Logic -->
     <script>
-        const barcodeInput = document.getElementById('barcodeInput');
-        const searchBtn = document.getElementById('searchBtn');
-        const resultSection = document.getElementById('resultSection');
-        const quickSelect = document.getElementById('quickSelect');
-        
+        let currentSearchCode = '';
         let html5QrCode = null;
 
+        // Load targets and stats on start
+        function loadTargetsData() {
+            fetch('/api/targets')
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) return;
+                    
+                    document.getElementById('completedCount').innerText = data.completed_count;
+                    document.getElementById('totalCount').innerText = data.total_count;
+                    document.getElementById('progressPctText').innerText = data.progress_pct + '%';
+                    document.getElementById('progressBar').style.width = data.progress_pct + '%';
+                    
+                    document.getElementById('sgCount').innerText = data.sg_list.length;
+                    document.getElementById('pgCount').innerText = data.pg_list.length;
+                    document.getElementById('doneCount').innerText = data.completed_list.length;
+
+                    // Fill SG Select
+                    const sgSelect = document.getElementById('sgSelect');
+                    sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 선택 --</option>';
+                    data.sg_list.forEach(t => {
+                        sgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
+                    });
+
+                    // Fill PG Select
+                    const pgSelect = document.getElementById('pgSelect');
+                    pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 선택 --</option>';
+                    data.pg_list.forEach(t => {
+                        pgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
+                    });
+
+                    // Fill Done Select
+                    const doneSelect = document.getElementById('doneSelect');
+                    doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>';
+                    data.completed_list.forEach(t => {
+                        doneSelect.innerHTML += `<option value="${t.reg_no}">[완료] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''} (${t.type})</option>`;
+                    });
+                });
+        }
+
+        loadTargetsData();
+
         function performSearch(code) {
-            if (!code) code = barcodeInput.value.trim();
+            if (!code) code = document.getElementById('barcodeInput').value.trim();
             if (!code) {
                 alert('바코드(등록번호)를 입력해주세요.');
                 return;
             }
-            barcodeInput.value = code.toUpperCase();
+            code = code.toUpperCase();
+            currentSearchCode = code;
+            document.getElementById('barcodeInput').value = code;
 
             fetch(`/api/search?code=${encodeURIComponent(code)}`)
                 .then(res => res.json())
@@ -221,6 +329,7 @@
         }
 
         function displayResult(data) {
+            const resultSection = document.getElementById('resultSection');
             resultSection.classList.remove('d-none');
             
             // Current book
@@ -231,14 +340,25 @@
             document.getElementById('lineName').innerText = curr.sub_line;
             document.getElementById('lineTargetCount').innerText = data.targets_count_in_line;
 
-            // Exact match
-            const exactBanner = document.getElementById('exactMatchBanner');
+            // Self Target Check Box
+            const selfTargetBox = document.getElementById('selfTargetBox');
+            const selfCompleteBtn = document.getElementById('selfCompleteBtn');
             if (data.is_target) {
-                exactBanner.classList.remove('d-none');
-                document.getElementById('exactMatchTitle').innerText = `${data.target_info.title} (${data.target_info.type})`;
-                document.getElementById('exactMatchCall').innerText = `청구기호: ${data.target_info.call_no || '-'}`;
+                selfTargetBox.classList.remove('d-none');
+                document.getElementById('selfTargetTitle').innerText = `${data.target_info.title || '-'} (${data.target_info.type})`;
+                document.getElementById('selfTargetCall').innerText = `청구기호: ${data.target_info.call_no || '-'}`;
+                
+                if (data.is_curr_completed) {
+                    selfCompleteBtn.className = 'btn btn-sm btn-secondary btn-complete px-3 py-2';
+                    selfCompleteBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> 찾음 취소(체크해제)';
+                    selfCompleteBtn.onclick = () => toggleBookComplete(curr.code);
+                } else {
+                    selfCompleteBtn.className = 'btn btn-sm btn-success btn-complete px-3 py-2';
+                    selfCompleteBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> 찾음 완료 체크';
+                    selfCompleteBtn.onclick = () => toggleBookComplete(curr.code);
+                }
             } else {
-                exactBanner.classList.add('d-none');
+                selfTargetBox.classList.add('d-none');
             }
 
             // Next Closest (Behind)
@@ -253,6 +373,7 @@
                 document.getElementById('nextTitle').innerText = t.info.title || '-';
                 document.getElementById('nextCall').innerText = t.info.call_no || '-';
                 document.getElementById('nextLoc').innerText = t.loc_desc;
+                nextCard.querySelector('button').dataset.reg = t.reg_no;
             } else {
                 nextCard.classList.add('d-none');
             }
@@ -269,16 +390,17 @@
                 document.getElementById('prevTitle').innerText = t.info.title || '-';
                 document.getElementById('prevCall').innerText = t.info.call_no || '-';
                 document.getElementById('prevLoc').innerText = t.loc_desc;
+                prevCard.querySelector('button').dataset.reg = t.reg_no;
             } else {
                 prevCard.classList.add('d-none');
             }
 
-            // List of all targets in line
+            // List of all uncompleted targets in line
             const listDiv = document.getElementById('lineTargetsList');
             listDiv.innerHTML = '';
             
             if (data.targets_by_distance.length === 0) {
-                listDiv.innerHTML = '<div class="alert alert-light text-center py-3">이 줄에는 찾아야 할 도서가 없습니다. 다른 라인으로 이동하세요.</div>';
+                listDiv.innerHTML = '<div class="alert alert-light text-center py-3">이 줄에는 남은 목표 도서가 없습니다! 🎉</div>';
             } else {
                 data.targets_by_distance.forEach(t => {
                     const card = document.createElement('div');
@@ -291,7 +413,10 @@
                             <span class="badge ${t.info.type === '서가배열' ? 'bg-primary' : 'bg-danger'}">${t.info.type}</span>
                         </div>
                         <h6 class="fw-bold mb-1 text-dark">${t.reg_no} - ${t.info.title || '-'}</h6>
-                        <div class="small text-muted"><i class="bi bi-tag"></i> ${t.info.call_no || '-'} | <i class="bi bi-geo"></i> ${t.loc_desc}</div>
+                        <div class="small text-muted mb-2"><i class="bi bi-tag"></i> ${t.info.call_no || '-'} | <i class="bi bi-geo"></i> ${t.loc_desc}</div>
+                        <button class="btn btn-sm btn-outline-success btn-complete w-100 py-1" onclick="toggleBookComplete('${t.reg_no}')">
+                            <i class="bi bi-check-lg"></i> 찾음 완료 체크
+                        </button>
                     `;
                     listDiv.appendChild(card);
                 });
@@ -300,16 +425,40 @@
             resultSection.scrollIntoView({ behavior: 'smooth' });
         }
 
-        searchBtn.addEventListener('click', () => performSearch());
-        barcodeInput.addEventListener('keypress', (e) => {
+        // Toggle Complete Function
+        function toggleBookComplete(regNo) {
+            if (!regNo) return;
+            fetch('/api/toggle_complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: regNo })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadTargetsData();
+                    // Re-search to immediately refresh distances
+                    if (currentSearchCode) {
+                        performSearch(currentSearchCode);
+                    }
+                }
+            });
+        }
+
+        document.getElementById('searchBtn').addEventListener('click', () => performSearch());
+        document.getElementById('barcodeInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') performSearch();
         });
 
-        quickSelect.addEventListener('change', (e) => {
-            if (e.target.value) {
-                barcodeInput.value = e.target.value;
-                performSearch(e.target.value);
-            }
+        // Dropdown selection listeners
+        document.getElementById('sgSelect').addEventListener('change', (e) => {
+            if (e.target.value) performSearch(e.target.value);
+        });
+        document.getElementById('pgSelect').addEventListener('change', (e) => {
+            if (e.target.value) performSearch(e.target.value);
+        });
+        document.getElementById('doneSelect').addEventListener('change', (e) => {
+            if (e.target.value) performSearch(e.target.value);
         });
 
         // Camera Scanner Logic
@@ -330,14 +479,11 @@
                 },
                 (decodedText, decodedResult) => {
                     stopScanner();
-                    barcodeInput.value = decodedText.trim().toUpperCase();
                     performSearch(decodedText.trim().toUpperCase());
                 },
-                (errorMessage) => {
-                    // ignore
-                }
+                (errorMessage) => {}
             ).catch(err => {
-                alert('카메라 접근 권한이 필요하거나 지원되지 않는 브라우저입니다: ' + err);
+                alert('카메라 접근 권한이 필요합니다: ' + err);
                 stopScanner();
             });
         });
