@@ -109,9 +109,14 @@
         
         <!-- Live Progress Status -->
         <div class="mt-2 pt-2 border-top border-light border-opacity-25 px-2">
-            <div class="d-flex justify-content-between small fw-bold mb-1">
+            <div class="d-flex justify-content-between align-items-center small fw-bold mb-1">
                 <span>🎯 전체 진행률 (<span id="completedCount">0</span>/<span id="totalCount">174</span>권 찾음)</span>
-                <span id="progressPctText">0%</span>
+                <div>
+                    <span id="syncBadge" class="badge bg-light text-dark me-1" style="font-size: 10px;">
+                        <i class="bi bi-arrow-repeat"></i> 확인 중
+                    </span>
+                    <span id="progressPctText">0%</span>
+                </div>
             </div>
             <div class="progress progress-slim bg-white bg-opacity-25">
                 <div id="progressBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
@@ -263,13 +268,24 @@
         let currentSearchCode = '';
         let html5QrCode = null;
 
+        let lastCompletedCount = -1;
+
         // Load targets and stats on start
-        function loadTargetsData() {
+        function loadTargetsData(silent = false) {
             fetch('/api/targets')
                 .then(res => res.json())
                 .then(data => {
                     if (!data.success) return;
                     
+                    const syncBadge = document.getElementById('syncBadge');
+                    if (data.cloud_storage) {
+                        syncBadge.className = 'badge bg-success text-white me-1';
+                        syncBadge.innerHTML = '<i class="bi bi-cloud-check-fill"></i> 실시간 공유중';
+                    } else {
+                        syncBadge.className = 'badge bg-secondary text-white me-1';
+                        syncBadge.innerHTML = '<i class="bi bi-hdd"></i> 로컬 모드';
+                    }
+
                     document.getElementById('completedCount').innerText = data.completed_count;
                     document.getElementById('totalCount').innerText = data.total_count;
                     document.getElementById('progressPctText').innerText = data.progress_pct + '%';
@@ -279,45 +295,72 @@
                     document.getElementById('pgCount').innerText = data.pg_list.length;
                     document.getElementById('doneCount').innerText = data.completed_list.length;
 
-                    // Fill SG Select
-                    const sgSelect = document.getElementById('sgSelect');
-                    sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 선택 --</option>';
-                    data.sg_list.forEach(t => {
-                        sgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
-                    });
+                    // If count changed or first load, refresh dropdowns
+                    if (lastCompletedCount !== data.completed_count) {
+                        lastCompletedCount = data.completed_count;
 
-                    // Fill PG Select
-                    const pgSelect = document.getElementById('pgSelect');
-                    pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 선택 --</option>';
-                    data.pg_list.forEach(t => {
-                        pgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
-                    });
+                        // Fill SG Select
+                        const sgSelect = document.getElementById('sgSelect');
+                        sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 선택 --</option>';
+                        data.sg_list.forEach(t => {
+                            sgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
+                        });
 
-                    // Fill Done Select
-                    const doneSelect = document.getElementById('doneSelect');
-                    doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>';
-                    data.completed_list.forEach(t => {
-                        doneSelect.innerHTML += `<option value="${t.reg_no}">[완료] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''} (${t.type})</option>`;
-                    });
-                });
+                        // Fill PG Select
+                        const pgSelect = document.getElementById('pgSelect');
+                        pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 선택 --</option>';
+                        data.pg_list.forEach(t => {
+                            pgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
+                        });
+
+                        // Fill Done Select
+                        const doneSelect = document.getElementById('doneSelect');
+                        doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>';
+                        data.completed_list.forEach(t => {
+                            doneSelect.innerHTML += `<option value="${t.reg_no}">[완료] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''} (${t.type})</option>`;
+                        });
+
+                        // If another worker completed a target and we have a search active, refresh results
+                        if (silent && currentSearchCode) {
+                            performSearch(currentSearchCode, true);
+                        }
+                    }
+                })
+                .catch(err => console.log('Fetch targets error:', err));
         }
 
         loadTargetsData();
 
-        function performSearch(code) {
+        // Auto live sync every 4 seconds
+        setInterval(() => {
+            loadTargetsData(true);
+        }, 4000);
+
+        function performSearch(code, isAutoRefresh = false) {
             if (!code) code = document.getElementById('barcodeInput').value.trim();
             if (!code) {
-                alert('바코드(등록번호)를 입력해주세요.');
+                if (!isAutoRefresh) alert('바코드(등록번호)를 입력해주세요.');
                 return;
             }
             code = code.toUpperCase();
             currentSearchCode = code;
-            document.getElementById('barcodeInput').value = code;
+            if (!isAutoRefresh) {
+                document.getElementById('barcodeInput').value = code;
+            }
 
             fetch(`/api/search?code=${encodeURIComponent(code)}`)
                 .then(res => res.json())
                 .then(data => {
                     if (!data.success) {
+                        if (!isAutoRefresh) alert(data.error);
+                        return;
+                    }
+                    displayResult(data);
+                })
+                .catch(err => {
+                    if (!isAutoRefresh) alert('검색 중 오류가 발생했습니다: ' + err);
+                });
+        }
                         alert(data.error);
                         return;
                     }

@@ -3,12 +3,29 @@ import os
 import sqlite3
 from flask import Flask, render_template, request, jsonify
 
+# Optional Supabase integration
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+
 app = Flask(__name__, template_folder='templates')
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'completed.db')
 DATA_PATH = os.path.join(os.path.dirname(__file__), 'data.json')
 
-def init_db():
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '').strip()
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '').strip()
+
+supabase_client: Client | None = None
+if SUPABASE_URL and SUPABASE_KEY and create_client:
+    try:
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print(" Connected to Supabase successfully.")
+    except Exception as e:
+        print(f"⚠️ Supabase client initialization error: {e}")
+
+def init_local_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute('''
@@ -20,15 +37,28 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()
+init_local_db()
 
-def get_completed_set():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute('SELECT reg_no FROM completed_books')
-    rows = cur.fetchall()
-    conn.close()
-    return set(r[0] for r in rows)
+def get_completed_set() -> set:
+    if supabase_client:
+        try:
+            res = supabase_client.table('completed_books').select('reg_no').execute()
+            if res and res.data is not None:
+                return set(row['reg_no'] for row in res.data)
+        except Exception as e:
+            print(f"⚠️ Supabase fetch error: {e}")
+    
+    # Fallback to local SQLite DB
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute('SELECT reg_no FROM completed_books')
+        rows = cur.fetchall()
+        conn.close()
+        return set(r[0] for r in rows)
+    except Exception as e:
+        print(f"⚠️ SQLite fetch error: {e}")
+        return set()
 
 # Load precomputed data
 with open(DATA_PATH, 'r', encoding='utf-8') as f:
@@ -79,6 +109,7 @@ def get_targets():
     
     return jsonify({
         'success': True,
+        'cloud_storage': (supabase_client is not None),
         'total_count': total_count,
         'completed_count': completed_count,
         'remaining_count': remaining_count,
@@ -96,21 +127,38 @@ def toggle_complete():
         return jsonify({'success': False, 'error': '등록번호가 필요합니다.'})
     
     completed_set = get_completed_set()
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
     
     if code in completed_set:
         # Uncheck
+        if supabase_client:
+            try:
+                supabase_client.table('completed_books').delete().eq('reg_no', code).execute()
+            except Exception as e:
+                print(f"⚠️ Supabase delete error: {e}")
+        
+        # Local SQLite sync
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
         cur.execute('DELETE FROM completed_books WHERE reg_no = ?', (code,))
+        conn.commit()
+        conn.close()
         is_completed = False
     else:
         # Check as completed
+        if supabase_client:
+            try:
+                supabase_client.table('completed_books').upsert({'reg_no': code}).execute()
+            except Exception as e:
+                print(f"⚠️ Supabase insert error: {e}")
+        
+        # Local SQLite sync
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
         cur.execute('INSERT OR REPLACE INTO completed_books (reg_no) VALUES (?)', (code,))
+        conn.commit()
+        conn.close()
         is_completed = True
         
-    conn.commit()
-    conn.close()
-    
     return jsonify({
         'success': True,
         'code': code,
