@@ -39,12 +39,25 @@ def init_local_db():
 
 init_local_db()
 
-def get_completed_set() -> set:
+_cached_completed_set = None
+_last_cache_time = 0
+
+def get_completed_set(force_refresh=False) -> set:
+    global _cached_completed_set, _last_cache_time
+    import time
+    now = time.time()
+    
+    # 2.5초 캐싱으로 반복 호출 시 0.001초 즉각 응답
+    if not force_refresh and _cached_completed_set is not None and (now - _last_cache_time < 2.5):
+        return _cached_completed_set
+        
     if supabase_client:
         try:
             res = supabase_client.table('completed_books').select('reg_no').execute()
             if res and res.data is not None:
-                return set(row['reg_no'] for row in res.data)
+                _cached_completed_set = set(row['reg_no'] for row in res.data)
+                _last_cache_time = now
+                return _cached_completed_set
         except Exception as e:
             print(f"⚠️ Supabase fetch error: {e}")
     
@@ -55,9 +68,12 @@ def get_completed_set() -> set:
         cur.execute('SELECT reg_no FROM completed_books')
         rows = cur.fetchall()
         conn.close()
-        return set(r[0] for r in rows)
+        _cached_completed_set = set(r[0] for r in rows)
+        _last_cache_time = now
+        return _cached_completed_set
     except Exception as e:
         print(f"⚠️ SQLite fetch error: {e}")
+        return set()
         return set()
 
 # Load precomputed data
@@ -166,6 +182,9 @@ def toggle_complete():
         conn.close()
         is_completed = True
         
+    global _cached_completed_set
+    _cached_completed_set = None
+    
     return jsonify({
         'success': True,
         'code': code,
