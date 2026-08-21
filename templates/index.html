@@ -9,7 +9,7 @@
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- HTML5 QR Code / Barcode Scanner -->
-    <script src="https://unpkg.com/html5-qrcode" defer></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body {
             background-color: #f0f2f5;
@@ -98,26 +98,6 @@
             height: 8px;
             border-radius: 4px;
         }
-        .target-list-box {
-            max-height: 380px;
-            overflow-y: auto;
-            padding-right: 4px;
-        }
-        .book-item-card {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
-            border-left: 4px solid #2f5597;
-            transition: all 0.2s;
-        }
-        .book-item-card:hover {
-            background: #eef3fc;
-        }
-        .book-item-card.is-done {
-            border-left-color: #198754;
-            background: #f4fbf7;
-        }
     </style>
 </head>
 <body>
@@ -129,14 +109,9 @@
         
         <!-- Live Progress Status -->
         <div class="mt-2 pt-2 border-top border-light border-opacity-25 px-2">
-            <div class="d-flex justify-content-between align-items-center small fw-bold mb-1">
+            <div class="d-flex justify-content-between small fw-bold mb-1">
                 <span>🎯 전체 진행률 (<span id="completedCount">0</span>/<span id="totalCount">174</span>권 찾음)</span>
-                <div>
-                    <span id="syncBadge" class="badge bg-light text-dark me-1" style="font-size: 10px;">
-                        <i class="bi bi-arrow-repeat"></i> 확인 중
-                    </span>
-                    <span id="progressPctText">0%</span>
-                </div>
+                <span id="progressPctText">0%</span>
             </div>
             <div class="progress progress-slim bg-white bg-opacity-25">
                 <div id="progressBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
@@ -190,30 +165,21 @@
                 <div class="tab-content" id="targetTabContent">
                     <!-- 서가배열 Tab -->
                     <div class="tab-pane fade show active" id="sg-pane">
-                        <select class="form-select form-select-sm mb-2" id="sgSelect">
-                            <option value="">-- 서가배열 남은 도서 빠른 선택 --</option>
+                        <select class="form-select form-select-sm" id="sgSelect">
+                            <option value="">-- 서가배열 남은 도서 선택 --</option>
                         </select>
-                        <div id="sgCards" class="target-list-box">
-                            <div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm text-primary me-1"></div> 도서 목록을 불러오는 중...</div>
-                        </div>
                     </div>
                     <!-- 폐기취소 Tab -->
                     <div class="tab-pane fade" id="pg-pane">
-                        <select class="form-select form-select-sm mb-2" id="pgSelect">
-                            <option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>
+                        <select class="form-select form-select-sm" id="pgSelect">
+                            <option value="">-- 폐기취소 남은 도서 선택 --</option>
                         </select>
-                        <div id="pgCards" class="target-list-box">
-                            <div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm text-danger me-1"></div> 도서 목록을 불러오는 중...</div>
-                        </div>
                     </div>
                     <!-- 완료 Tab -->
                     <div class="tab-pane fade" id="done-pane">
-                        <select class="form-select form-select-sm mb-2" id="doneSelect">
-                            <option value="">-- 이미 찾은 도서 빠른 선택 --</option>
+                        <select class="form-select form-select-sm" id="doneSelect">
+                            <option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>
                         </select>
-                        <div id="doneCards" class="target-list-box">
-                            <div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm text-success me-1"></div> 완료 도서 목록을 불러오는 중...</div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -296,193 +262,62 @@
     <script>
         let currentSearchCode = '';
         let html5QrCode = null;
-        let lastCompletedCount = -1;
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        }
 
         // Load targets and stats on start
-        function loadTargetsData(silent = false) {
-            fetch('/api/targets?_t=' + Date.now())
-                .then(res => {
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    return res.json();
-                })
+        function loadTargetsData() {
+            fetch('/api/targets')
+                .then(res => res.json())
                 .then(data => {
-                    if (!data.success) throw new Error(data.error || 'API Error');
+                    if (!data.success) return;
                     
-                    const syncBadge = document.getElementById('syncBadge');
-                    if (syncBadge) {
-                        if (data.cloud_storage) {
-                            syncBadge.className = 'badge bg-success text-white me-1';
-                            syncBadge.innerHTML = '<i class="bi bi-cloud-check-fill"></i> 실시간 공유중';
-                        } else {
-                            syncBadge.className = 'badge bg-secondary text-white me-1';
-                            syncBadge.innerHTML = '<i class="bi bi-hdd"></i> 로컬 모드';
-                        }
-                    }
-
-                    const completedCountEl = document.getElementById('completedCount');
-                    if (completedCountEl) completedCountEl.innerText = data.completed_count;
-                    const totalCountEl = document.getElementById('totalCount');
-                    if (totalCountEl) totalCountEl.innerText = data.total_count;
-                    const progressPctTextEl = document.getElementById('progressPctText');
-                    if (progressPctTextEl) progressPctTextEl.innerText = data.progress_pct + '%';
-                    const progressBarEl = document.getElementById('progressBar');
-                    if (progressBarEl) progressBarEl.style.width = data.progress_pct + '%';
+                    document.getElementById('completedCount').innerText = data.completed_count;
+                    document.getElementById('totalCount').innerText = data.total_count;
+                    document.getElementById('progressPctText').innerText = data.progress_pct + '%';
+                    document.getElementById('progressBar').style.width = data.progress_pct + '%';
                     
-                    const sgCountEl = document.getElementById('sgCount');
-                    if (sgCountEl) sgCountEl.innerText = data.sg_list.length;
-                    const pgCountEl = document.getElementById('pgCount');
-                    if (pgCountEl) pgCountEl.innerText = data.pg_list.length;
-                    const doneCountEl = document.getElementById('doneCount');
-                    if (doneCountEl) doneCountEl.innerText = data.completed_list.length;
+                    document.getElementById('sgCount').innerText = data.sg_list.length;
+                    document.getElementById('pgCount').innerText = data.pg_list.length;
+                    document.getElementById('doneCount').innerText = data.completed_list.length;
 
-                    // Always fill on first load or when count changes
-                    if (lastCompletedCount !== data.completed_count) {
-                        lastCompletedCount = data.completed_count;
+                    // Fill SG Select
+                    const sgSelect = document.getElementById('sgSelect');
+                    sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 선택 --</option>';
+                    data.sg_list.forEach(t => {
+                        sgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
+                    });
 
-                        // Fill SG Select & Cards
-                        const sgSelect = document.getElementById('sgSelect');
-                        if (sgSelect) {
-                            sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 빠른 선택 --</option>';
-                            data.sg_list.forEach(t => {
-                                sgSelect.innerHTML += `<option value="${escapeHtml(t.reg_no)}">[${escapeHtml(t.sub_line)}] ${escapeHtml(t.reg_no)} - ${escapeHtml(t.title ? t.title.substring(0, 20) : '')}</option>`;
-                            });
-                        }
-                        renderTargetList(data.sg_list, 'sgCards', false);
+                    // Fill PG Select
+                    const pgSelect = document.getElementById('pgSelect');
+                    pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 선택 --</option>';
+                    data.pg_list.forEach(t => {
+                        pgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
+                    });
 
-                        // Fill PG Select & Cards
-                        const pgSelect = document.getElementById('pgSelect');
-                        if (pgSelect) {
-                            pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>';
-                            data.pg_list.forEach(t => {
-                                pgSelect.innerHTML += `<option value="${escapeHtml(t.reg_no)}">[${escapeHtml(t.sub_line)}] ${escapeHtml(t.reg_no)} - ${escapeHtml(t.title ? t.title.substring(0, 20) : '')}</option>`;
-                            });
-                        }
-                        renderTargetList(data.pg_list, 'pgCards', false);
-
-                        // Fill Done Select & Cards
-                        const doneSelect = document.getElementById('doneSelect');
-                        if (doneSelect) {
-                            doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 빠른 선택 --</option>';
-                            data.completed_list.forEach(t => {
-                                doneSelect.innerHTML += `<option value="${escapeHtml(t.reg_no)}">[완료] ${escapeHtml(t.reg_no)} - ${escapeHtml(t.title ? t.title.substring(0, 20) : '')} (${escapeHtml(t.type)})</option>`;
-                            });
-                        }
-                        renderTargetList(data.completed_list, 'doneCards', true);
-
-                        // If another worker completed a target and we have a search active, refresh results
-                        if (silent && currentSearchCode) {
-                            performSearch(currentSearchCode, true);
-                        }
-                    }
-                })
-                .catch(err => {
-                    console.error('Fetch targets error:', err);
-                    if (!silent) {
-                        ['sgCards', 'pgCards', 'doneCards'].forEach(id => {
-                            const el = document.getElementById(id);
-                            if (el && el.innerHTML.includes('spinner-border')) {
-                                el.innerHTML = `
-                                    <div class="text-center py-3 text-danger small">
-                                        <i class="bi bi-exclamation-triangle me-1"></i> 목록을 불러오지 못했습니다.
-                                        <button class="btn btn-sm btn-outline-dark mt-2 d-block mx-auto" onclick="loadTargetsData()">
-                                            <i class="bi bi-arrow-clockwise"></i> 다시 시도
-                                        </button>
-                                    </div>
-                                `;
-                            }
-                        });
-                    }
+                    // Fill Done Select
+                    const doneSelect = document.getElementById('doneSelect');
+                    doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>';
+                    data.completed_list.forEach(t => {
+                        doneSelect.innerHTML += `<option value="${t.reg_no}">[완료] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''} (${t.type})</option>`;
+                    });
                 });
         }
 
-        // Render card list inside tabs
-        function renderTargetList(list, containerId, isDoneList) {
-            const container = document.getElementById(containerId);
-            if (!container) return;
-            
-            if (!list || list.length === 0) {
-                container.innerHTML = `<div class="text-center py-4 text-muted small">${isDoneList ? '아직 찾은 도서가 없습니다.' : '남은 도서가 없습니다! 🎉'}</div>`;
-                return;
-            }
-            
-            let html = '';
-            list.forEach(t => {
-                const regNo = escapeHtml(t.reg_no);
-                const title = escapeHtml(t.title || '제목 없음');
-                const locDesc = escapeHtml(t.loc_desc || '-');
-                const callNo = escapeHtml(t.call_no || '-');
-                const type = escapeHtml(t.type || '');
-                const typeBadgeClass = (t.type === '서가배열') ? 'bg-primary' : 'bg-danger';
-
-                html += `
-                    <div class="book-item-card ${isDoneList ? 'is-done' : ''}">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="fw-bold text-primary" style="letter-spacing: 0.5px;">${regNo}</span>
-                            <span class="badge ${typeBadgeClass}">${type}</span>
-                        </div>
-                        <div class="fw-bold small text-dark mb-1 text-truncate">${title}</div>
-                        <div class="small text-muted mb-2" style="font-size: 11px;">
-                            <span><i class="bi bi-geo-alt"></i> ${locDesc}</span> | 
-                            <span><i class="bi bi-tag"></i> ${callNo}</span>
-                        </div>
-                        <div class="d-flex gap-1">
-                            <button class="btn btn-sm btn-outline-primary py-1 px-2 flex-grow-1" style="font-size: 11px;" onclick="performSearch('${regNo}')">
-                                <i class="bi bi-compass"></i> 위치/거리 탐색
-                            </button>
-                            <button class="btn btn-sm ${isDoneList ? 'btn-outline-secondary' : 'btn-outline-success'} py-1 px-2" style="font-size: 11px;" onclick="toggleBookComplete('${regNo}')">
-                                ${isDoneList ? '<i class="bi bi-arrow-counterclockwise"></i> 취소' : '<i class="bi bi-check-lg"></i> 찾음'}
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-            container.innerHTML = html;
-        }
-
-        // Initialize immediately & on DOM load
         loadTargetsData();
-        document.addEventListener('DOMContentLoaded', () => loadTargetsData());
 
-        // Auto live sync every 4 seconds
-        setInterval(() => {
-            loadTargetsData(true);
-        }, 4000);
-
-        function performSearch(code, isAutoRefresh = false) {
+        function performSearch(code) {
             if (!code) code = document.getElementById('barcodeInput').value.trim();
             if (!code) {
-                if (!isAutoRefresh) alert('바코드(등록번호)를 입력해주세요.');
+                alert('바코드(등록번호)를 입력해주세요.');
                 return;
             }
             code = code.toUpperCase();
             currentSearchCode = code;
-            if (!isAutoRefresh) {
-                document.getElementById('barcodeInput').value = code;
-            }
+            document.getElementById('barcodeInput').value = code;
 
             fetch(`/api/search?code=${encodeURIComponent(code)}`)
                 .then(res => res.json())
                 .then(data => {
                     if (!data.success) {
-                        if (!isAutoRefresh) alert(data.error);
-                        return;
-                    }
-                    displayResult(data);
-                })
-                .catch(err => {
-                    if (!isAutoRefresh) alert('검색 중 오류가 발생했습니다: ' + err);
-                });
-        }
                         alert(data.error);
                         return;
                     }

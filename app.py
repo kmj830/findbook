@@ -74,7 +74,6 @@ def get_completed_set(force_refresh=False) -> set:
     except Exception as e:
         print(f"⚠️ SQLite fetch error: {e}")
         return set()
-        return set()
 
 # Load precomputed data
 with open(DATA_PATH, 'r', encoding='utf-8') as f:
