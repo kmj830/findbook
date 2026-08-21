@@ -9,7 +9,7 @@
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- HTML5 QR Code / Barcode Scanner -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
     <style>
         body {
             background-color: #f0f2f5;
@@ -296,60 +296,87 @@
     <script>
         let currentSearchCode = '';
         let html5QrCode = null;
-
         let lastCompletedCount = -1;
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
 
         // Load targets and stats on start
         function loadTargetsData(silent = false) {
             fetch('/api/targets?_t=' + Date.now())
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
                 .then(data => {
-                    if (!data.success) return;
+                    if (!data.success) throw new Error(data.error || 'API Error');
                     
                     const syncBadge = document.getElementById('syncBadge');
-                    if (data.cloud_storage) {
-                        syncBadge.className = 'badge bg-success text-white me-1';
-                        syncBadge.innerHTML = '<i class="bi bi-cloud-check-fill"></i> 실시간 공유중';
-                    } else {
-                        syncBadge.className = 'badge bg-secondary text-white me-1';
-                        syncBadge.innerHTML = '<i class="bi bi-hdd"></i> 로컬 모드';
+                    if (syncBadge) {
+                        if (data.cloud_storage) {
+                            syncBadge.className = 'badge bg-success text-white me-1';
+                            syncBadge.innerHTML = '<i class="bi bi-cloud-check-fill"></i> 실시간 공유중';
+                        } else {
+                            syncBadge.className = 'badge bg-secondary text-white me-1';
+                            syncBadge.innerHTML = '<i class="bi bi-hdd"></i> 로컬 모드';
+                        }
                     }
 
-                    document.getElementById('completedCount').innerText = data.completed_count;
-                    document.getElementById('totalCount').innerText = data.total_count;
-                    document.getElementById('progressPctText').innerText = data.progress_pct + '%';
-                    document.getElementById('progressBar').style.width = data.progress_pct + '%';
+                    const completedCountEl = document.getElementById('completedCount');
+                    if (completedCountEl) completedCountEl.innerText = data.completed_count;
+                    const totalCountEl = document.getElementById('totalCount');
+                    if (totalCountEl) totalCountEl.innerText = data.total_count;
+                    const progressPctTextEl = document.getElementById('progressPctText');
+                    if (progressPctTextEl) progressPctTextEl.innerText = data.progress_pct + '%';
+                    const progressBarEl = document.getElementById('progressBar');
+                    if (progressBarEl) progressBarEl.style.width = data.progress_pct + '%';
                     
-                    document.getElementById('sgCount').innerText = data.sg_list.length;
-                    document.getElementById('pgCount').innerText = data.pg_list.length;
-                    document.getElementById('doneCount').innerText = data.completed_list.length;
+                    const sgCountEl = document.getElementById('sgCount');
+                    if (sgCountEl) sgCountEl.innerText = data.sg_list.length;
+                    const pgCountEl = document.getElementById('pgCount');
+                    if (pgCountEl) pgCountEl.innerText = data.pg_list.length;
+                    const doneCountEl = document.getElementById('doneCount');
+                    if (doneCountEl) doneCountEl.innerText = data.completed_list.length;
 
-                    // If count changed or first load, refresh dropdowns and list cards
+                    // Always fill on first load or when count changes
                     if (lastCompletedCount !== data.completed_count) {
                         lastCompletedCount = data.completed_count;
 
                         // Fill SG Select & Cards
                         const sgSelect = document.getElementById('sgSelect');
-                        sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 빠른 선택 --</option>';
-                        data.sg_list.forEach(t => {
-                            sgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
-                        });
+                        if (sgSelect) {
+                            sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 빠른 선택 --</option>';
+                            data.sg_list.forEach(t => {
+                                sgSelect.innerHTML += `<option value="${escapeHtml(t.reg_no)}">[${escapeHtml(t.sub_line)}] ${escapeHtml(t.reg_no)} - ${escapeHtml(t.title ? t.title.substring(0, 20) : '')}</option>`;
+                            });
+                        }
                         renderTargetList(data.sg_list, 'sgCards', false);
 
                         // Fill PG Select & Cards
                         const pgSelect = document.getElementById('pgSelect');
-                        pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>';
-                        data.pg_list.forEach(t => {
-                            pgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
-                        });
+                        if (pgSelect) {
+                            pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>';
+                            data.pg_list.forEach(t => {
+                                pgSelect.innerHTML += `<option value="${escapeHtml(t.reg_no)}">[${escapeHtml(t.sub_line)}] ${escapeHtml(t.reg_no)} - ${escapeHtml(t.title ? t.title.substring(0, 20) : '')}</option>`;
+                            });
+                        }
                         renderTargetList(data.pg_list, 'pgCards', false);
 
                         // Fill Done Select & Cards
                         const doneSelect = document.getElementById('doneSelect');
-                        doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 빠른 선택 --</option>';
-                        data.completed_list.forEach(t => {
-                            doneSelect.innerHTML += `<option value="${t.reg_no}">[완료] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''} (${t.type})</option>`;
-                        });
+                        if (doneSelect) {
+                            doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 빠른 선택 --</option>';
+                            data.completed_list.forEach(t => {
+                                doneSelect.innerHTML += `<option value="${escapeHtml(t.reg_no)}">[완료] ${escapeHtml(t.reg_no)} - ${escapeHtml(t.title ? t.title.substring(0, 20) : '')} (${escapeHtml(t.type)})</option>`;
+                            });
+                        }
                         renderTargetList(data.completed_list, 'doneCards', true);
 
                         // If another worker completed a target and we have a search active, refresh results
@@ -358,7 +385,24 @@
                         }
                     }
                 })
-                .catch(err => console.log('Fetch targets error:', err));
+                .catch(err => {
+                    console.error('Fetch targets error:', err);
+                    if (!silent) {
+                        ['sgCards', 'pgCards', 'doneCards'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el && el.innerHTML.includes('spinner-border')) {
+                                el.innerHTML = `
+                                    <div class="text-center py-3 text-danger small">
+                                        <i class="bi bi-exclamation-triangle me-1"></i> 목록을 불러오지 못했습니다.
+                                        <button class="btn btn-sm btn-outline-dark mt-2 d-block mx-auto" onclick="loadTargetsData()">
+                                            <i class="bi bi-arrow-clockwise"></i> 다시 시도
+                                        </button>
+                                    </div>
+                                `;
+                            }
+                        });
+                    }
+                });
         }
 
         // Render card list inside tabs
@@ -366,29 +410,36 @@
             const container = document.getElementById(containerId);
             if (!container) return;
             
-            if (list.length === 0) {
+            if (!list || list.length === 0) {
                 container.innerHTML = `<div class="text-center py-4 text-muted small">${isDoneList ? '아직 찾은 도서가 없습니다.' : '남은 도서가 없습니다! 🎉'}</div>`;
                 return;
             }
             
             let html = '';
             list.forEach(t => {
+                const regNo = escapeHtml(t.reg_no);
+                const title = escapeHtml(t.title || '제목 없음');
+                const locDesc = escapeHtml(t.loc_desc || '-');
+                const callNo = escapeHtml(t.call_no || '-');
+                const type = escapeHtml(t.type || '');
+                const typeBadgeClass = (t.type === '서가배열') ? 'bg-primary' : 'bg-danger';
+
                 html += `
                     <div class="book-item-card ${isDoneList ? 'is-done' : ''}">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="fw-bold text-primary" style="letter-spacing: 0.5px;">${t.reg_no}</span>
-                            <span class="badge ${t.type === '서가배열' ? 'bg-primary' : 'bg-danger'}">${t.type}</span>
+                            <span class="fw-bold text-primary" style="letter-spacing: 0.5px;">${regNo}</span>
+                            <span class="badge ${typeBadgeClass}">${type}</span>
                         </div>
-                        <div class="fw-bold small text-dark mb-1 text-truncate">${t.title || '제목 없음'}</div>
+                        <div class="fw-bold small text-dark mb-1 text-truncate">${title}</div>
                         <div class="small text-muted mb-2" style="font-size: 11px;">
-                            <span><i class="bi bi-geo-alt"></i> ${t.loc_desc}</span> | 
-                            <span><i class="bi bi-tag"></i> ${t.call_no || '-'}</span>
+                            <span><i class="bi bi-geo-alt"></i> ${locDesc}</span> | 
+                            <span><i class="bi bi-tag"></i> ${callNo}</span>
                         </div>
                         <div class="d-flex gap-1">
-                            <button class="btn btn-sm btn-outline-primary py-1 px-2 flex-grow-1" style="font-size: 11px;" onclick="performSearch('${t.reg_no}')">
+                            <button class="btn btn-sm btn-outline-primary py-1 px-2 flex-grow-1" style="font-size: 11px;" onclick="performSearch('${regNo}')">
                                 <i class="bi bi-compass"></i> 위치/거리 탐색
                             </button>
-                            <button class="btn btn-sm ${isDoneList ? 'btn-outline-secondary' : 'btn-outline-success'} py-1 px-2" style="font-size: 11px;" onclick="toggleBookComplete('${t.reg_no}')">
+                            <button class="btn btn-sm ${isDoneList ? 'btn-outline-secondary' : 'btn-outline-success'} py-1 px-2" style="font-size: 11px;" onclick="toggleBookComplete('${regNo}')">
                                 ${isDoneList ? '<i class="bi bi-arrow-counterclockwise"></i> 취소' : '<i class="bi bi-check-lg"></i> 찾음'}
                             </button>
                         </div>
@@ -398,7 +449,9 @@
             container.innerHTML = html;
         }
 
+        // Initialize immediately & on DOM load
         loadTargetsData();
+        document.addEventListener('DOMContentLoaded', () => loadTargetsData());
 
         // Auto live sync every 4 seconds
         setInterval(() => {
