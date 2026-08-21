@@ -98,6 +98,26 @@
             height: 8px;
             border-radius: 4px;
         }
+        .target-list-box {
+            max-height: 380px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .book-item-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-left: 4px solid #2f5597;
+            transition: all 0.2s;
+        }
+        .book-item-card:hover {
+            background: #eef3fc;
+        }
+        .book-item-card.is-done {
+            border-left-color: #198754;
+            background: #f4fbf7;
+        }
     </style>
 </head>
 <body>
@@ -170,21 +190,24 @@
                 <div class="tab-content" id="targetTabContent">
                     <!-- 서가배열 Tab -->
                     <div class="tab-pane fade show active" id="sg-pane">
-                        <select class="form-select form-select-sm" id="sgSelect">
-                            <option value="">-- 서가배열 남은 도서 선택 --</option>
+                        <select class="form-select form-select-sm mb-2" id="sgSelect">
+                            <option value="">-- 서가배열 남은 도서 빠른 선택 --</option>
                         </select>
+                        <div id="sgCards" class="target-list-box"></div>
                     </div>
                     <!-- 폐기취소 Tab -->
                     <div class="tab-pane fade" id="pg-pane">
-                        <select class="form-select form-select-sm" id="pgSelect">
-                            <option value="">-- 폐기취소 남은 도서 선택 --</option>
+                        <select class="form-select form-select-sm mb-2" id="pgSelect">
+                            <option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>
                         </select>
+                        <div id="pgCards" class="target-list-box"></div>
                     </div>
                     <!-- 완료 Tab -->
                     <div class="tab-pane fade" id="done-pane">
-                        <select class="form-select form-select-sm" id="doneSelect">
-                            <option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>
+                        <select class="form-select form-select-sm mb-2" id="doneSelect">
+                            <option value="">-- 이미 찾은 도서 빠른 선택 --</option>
                         </select>
+                        <div id="doneCards" class="target-list-box"></div>
                     </div>
                 </div>
             </div>
@@ -295,30 +318,33 @@
                     document.getElementById('pgCount').innerText = data.pg_list.length;
                     document.getElementById('doneCount').innerText = data.completed_list.length;
 
-                    // If count changed or first load, refresh dropdowns
+                    // If count changed or first load, refresh dropdowns and list cards
                     if (lastCompletedCount !== data.completed_count) {
                         lastCompletedCount = data.completed_count;
 
-                        // Fill SG Select
+                        // Fill SG Select & Cards
                         const sgSelect = document.getElementById('sgSelect');
-                        sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 선택 --</option>';
+                        sgSelect.innerHTML = '<option value="">-- 서가배열 남은 도서 빠른 선택 --</option>';
                         data.sg_list.forEach(t => {
                             sgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
                         });
+                        renderTargetList(data.sg_list, 'sgCards', false);
 
-                        // Fill PG Select
+                        // Fill PG Select & Cards
                         const pgSelect = document.getElementById('pgSelect');
-                        pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 선택 --</option>';
+                        pgSelect.innerHTML = '<option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>';
                         data.pg_list.forEach(t => {
                             pgSelect.innerHTML += `<option value="${t.reg_no}">[${t.sub_line}] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''}</option>`;
                         });
+                        renderTargetList(data.pg_list, 'pgCards', false);
 
-                        // Fill Done Select
+                        // Fill Done Select & Cards
                         const doneSelect = document.getElementById('doneSelect');
-                        doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 (선택 시 체크 해제 가능) --</option>';
+                        doneSelect.innerHTML = '<option value="">-- 이미 찾은 도서 빠른 선택 --</option>';
                         data.completed_list.forEach(t => {
                             doneSelect.innerHTML += `<option value="${t.reg_no}">[완료] ${t.reg_no} - ${t.title ? t.title.substring(0, 20) : ''} (${t.type})</option>`;
                         });
+                        renderTargetList(data.completed_list, 'doneCards', true);
 
                         // If another worker completed a target and we have a search active, refresh results
                         if (silent && currentSearchCode) {
@@ -327,6 +353,43 @@
                     }
                 })
                 .catch(err => console.log('Fetch targets error:', err));
+        }
+
+        // Render card list inside tabs
+        function renderTargetList(list, containerId, isDoneList) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            if (list.length === 0) {
+                container.innerHTML = `<div class="text-center py-4 text-muted small">${isDoneList ? '아직 찾은 도서가 없습니다.' : '남은 도서가 없습니다! 🎉'}</div>`;
+                return;
+            }
+            
+            let html = '';
+            list.forEach(t => {
+                html += `
+                    <div class="book-item-card ${isDoneList ? 'is-done' : ''}">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold text-primary" style="letter-spacing: 0.5px;">${t.reg_no}</span>
+                            <span class="badge ${t.type === '서가배열' ? 'bg-primary' : 'bg-danger'}">${t.type}</span>
+                        </div>
+                        <div class="fw-bold small text-dark mb-1 text-truncate">${t.title || '제목 없음'}</div>
+                        <div class="small text-muted mb-2" style="font-size: 11px;">
+                            <span><i class="bi bi-geo-alt"></i> ${t.loc_desc}</span> | 
+                            <span><i class="bi bi-tag"></i> ${t.call_no || '-'}</span>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-primary py-1 px-2 flex-grow-1" style="font-size: 11px;" onclick="performSearch('${t.reg_no}')">
+                                <i class="bi bi-compass"></i> 위치/거리 탐색
+                            </button>
+                            <button class="btn btn-sm ${isDoneList ? 'btn-outline-secondary' : 'btn-outline-success'} py-1 px-2" style="font-size: 11px;" onclick="toggleBookComplete('${t.reg_no}')">
+                                ${isDoneList ? '<i class="bi bi-arrow-counterclockwise"></i> 취소' : '<i class="bi bi-check-lg"></i> 찾음'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
         }
 
         loadTargetsData();
