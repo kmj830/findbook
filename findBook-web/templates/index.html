@@ -193,21 +193,27 @@
                         <select class="form-select form-select-sm mb-2" id="sgSelect">
                             <option value="">-- 서가배열 남은 도서 빠른 선택 --</option>
                         </select>
-                        <div id="sgCards" class="target-list-box"></div>
+                        <div id="sgCards" class="target-list-box">
+                            <div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm text-primary me-1"></div> 도서 목록을 불러오는 중...</div>
+                        </div>
                     </div>
                     <!-- 폐기취소 Tab -->
                     <div class="tab-pane fade" id="pg-pane">
                         <select class="form-select form-select-sm mb-2" id="pgSelect">
                             <option value="">-- 폐기취소 남은 도서 빠른 선택 --</option>
                         </select>
-                        <div id="pgCards" class="target-list-box"></div>
+                        <div id="pgCards" class="target-list-box">
+                            <div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm text-danger me-1"></div> 도서 목록을 불러오는 중...</div>
+                        </div>
                     </div>
                     <!-- 완료 Tab -->
                     <div class="tab-pane fade" id="done-pane">
                         <select class="form-select form-select-sm mb-2" id="doneSelect">
                             <option value="">-- 이미 찾은 도서 빠른 선택 --</option>
                         </select>
-                        <div id="doneCards" class="target-list-box"></div>
+                        <div id="doneCards" class="target-list-box">
+                            <div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm text-success me-1"></div> 완료 도서 목록을 불러오는 중...</div>
+                        </div>
                     </div>
                 </div>
             </div>
